@@ -45,7 +45,11 @@ class Graphics:
             self.main_screen.delete(self.raycasts[i])
         
         for raycast in raycasts:
-            self.raycasts.append(self.main_screen.create_line(raycast[0][0], raycast[0][1], raycast[1][0], raycast[1][1], width=3, fill="blue"))
+            color = "blue"
+            if raycast[2] == 1:
+                color = "light blue"
+
+            self.raycasts.append(self.main_screen.create_line(raycast[0][0], raycast[0][1], raycast[1][0], raycast[1][1], width=2, fill=color))
 
     def update_window(self):
         self.root.update_idletasks()

@@ -18,6 +18,7 @@ class Car:
         self.drag = drag
         # 0 - 1, the higher this is the less the steering is affected by speed
         self.steering_to_speed_ratio = steering_to_speed_ratio
+        self.starting_position = starting_position
 
     def update_position(self, acceleration, steering, delta_time):
         if acceleration >= 0:
@@ -52,3 +53,9 @@ class Car:
             vertices[i] += self.position
 
         return vertices
+    
+    def reset_position(self):
+        self.position.x = self.starting_position[0]
+        self.position.y = self.starting_position[1]
+        self.speed = 0
+        self.rotation = 0
