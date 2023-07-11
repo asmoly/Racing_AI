@@ -14,6 +14,8 @@ class Graphics:
         self.main_screen.create_image(0, 0, image=track_image, anchor=NW)
 
         self.car_sprite = 0
+        self.gates = []
+        self.raycasts = []
 
     def draw_car(self, car, color, car_size):
         self.main_screen.delete(self.car_sprite)
@@ -24,6 +26,26 @@ class Graphics:
                                                           car_vertices[2].x, car_vertices[2].y,
                                                           car_vertices[3].x, car_vertices[3].y,
                                                           fill=color)
+
+    def draw_gates(self, gates):
+        self.gates = []
+        
+        for i in range (0, len(self.gates)):
+            self.main_screen.delete(self.gates[i])
+        
+        for gate in gates:
+            color = "red"
+            if gate[1] == 1:
+                color = "green"
+
+            self.gates.append(self.main_screen.create_line(gate[0][0][0], gate[0][0][1], gate[0][1][0], gate[0][1][1], fill=color, width=3))
+
+    def draw_raycasts(self, raycasts):
+        for i in range (0, len(self.raycasts)):
+            self.main_screen.delete(self.raycasts[i])
+        
+        for raycast in raycasts:
+            self.raycasts.append(self.main_screen.create_line(raycast[0][0], raycast[0][1], raycast[1][0], raycast[1][1], width=3, fill="blue"))
 
     def update_window(self):
         self.root.update_idletasks()
