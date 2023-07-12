@@ -2,6 +2,7 @@ import pickle
 import math
 import numpy as np
 from cv2 import imread, cvtColor, COLOR_BGR2GRAY
+from time import time
 
 from Graphics import Graphics
 from Car import Car
@@ -18,16 +19,29 @@ class Environment:
                           [0, 0.5],  [0, -0.5],
                           [0, 0]]
     
-    def __init__(self, path_to_gates, path_to_track, window_dimensions, car) -> None:
-        self.window = Graphics(path_to_track, window_dimensions)
-        self.car = car
+    def __init__(self, path_to_track, window_dimensions, car, car_size) -> None:
+        path_to_track_image = f"{path_to_track}/race_track.png"
+        path_to_gates = f"{path_to_track}/race_track_gates"
+        path_to_finish_line = f"{path_to_track}/race_track_finish_line"
         
-        self.track_array = imread(path_to_track)
+        self.window = Graphics(path_to_track_image, window_dimensions)
+        self.car = car
+        self.car_size = car_size
+        
+        self.track_array = imread(path_to_track_image)
         self.track_array = cvtColor(self.track_array, COLOR_BGR2GRAY)
 
         self.gates = pickle.load(open(path_to_gates, "rb"))
         for i in range (0, len(self.gates)):
             self.gates[i] = [self.gates[i], 0]
+
+        self.finish_line = pickle.load(open(path_to_finish_line, "rb"))
+
+        self.window.draw_gates(self.gates, self.finish_line)
+
+        self.best_lap_time = 100000
+        self.lap_start_time = time()
+        self.on_finish_line = False
 
     def step(self, delta_time, action):
         controls = Environment.actions_to_command[action]
@@ -36,13 +50,87 @@ class Environment:
 
         self.car.update_position(acceleration, steering, delta_time)
         
+        reward = 0
+
         raycasts, raycasts_to_draw = self.get_raycast_values([90, -90, 0, 10, 20, 30, 50, 70, -10, -20, -30, -50, -70])
-        self.check_for_collision_with_wall()
+
+        # 1 is right direction, 0 is wrong direction
+        direction = 0
+        if raycasts[0][1] == 1 and raycasts[1][1] == 0:
+            direction = 1
+            reward += 1
+        else:
+            reward -= 1
+
+        gate_collision = self.check_for_collision_with_gates()
+
+        if gate_collision == True:
+            reward += 5
+        elif gate_collision == "finish":
+            reward += 20
+        elif gate_collision == "finish new best":
+            reward += 40
+
+        wall_collision = self.check_for_collision_with_wall()
+
+        if wall_collision == True:
+            reward -= 15
 
         self.window.draw_raycasts(raycasts_to_draw)
-        self.window.draw_car(self.car, "red", (10, 20))
+        self.window.draw_car(self.car, "red", self.car_size)
         #self.window.draw_gates(self.gates)
         self.window.update_window()
+
+        return raycasts, reward, self.car.speed
+
+    def check_for_collision_with_gates(self):
+        car_vertices = self.car.get_vertices(self.car_size[0], self.car_size[1])
+        sides = [[car_vertices[0].to_tuple(), car_vertices[1].to_tuple()], [car_vertices[1].to_tuple(), car_vertices[2].to_tuple()], [car_vertices[2].to_tuple(), car_vertices[3].to_tuple()], [car_vertices[3].to_tuple(), car_vertices[0].to_tuple()]]
+
+        touched_finish_line = False
+        for side in sides:
+            line_overlap, point_of_overlap = Environment.line_overlap(side, self.finish_line)
+            if line_overlap == True:
+                touched_finish_line = True
+
+        if touched_finish_line == True:
+            hit_all_gates = True
+            for gate in self.gates:
+                if gate[1] == 0:
+                    hit_all_gates = False
+            
+            if hit_all_gates == True:
+                lap_time = time() - self.lap_start_time
+                if self.on_finish_line == False:
+                    new_best = False
+                    if lap_time < self.best_lap_time:
+                        self.best_lap_time = lap_time
+                        self.window.update_lap_time(self.best_lap_time)
+                        new_best = True
+
+                    self.lap_start_time = time()
+                    self.reset_gates()
+                    self.on_finish_line = True
+                      
+                    if new_best == True:
+                        return "finish new best"  
+                    
+                    return "finish"
+        else:
+            self.on_finish_line = False
+
+        for i in range (0, len(self.gates)):
+            if self.gates[i][1] == 0:
+                for side in sides:
+                    line_overlap, point_of_overlap = Environment.line_overlap(side, (self.gates[i][0][0], self.gates[i][0][1]))
+                    if line_overlap == True:
+                        if self.gates[i][1] == 0:
+                            self.gates[i][1] = 1
+                            self.window.update_gate(i, 1, self.gates[i])
+                            
+                            return True
+
+        return False
 
     def get_raycast_values(self, raycast_angles):
         raycast_results = []
@@ -77,10 +165,68 @@ class Environment:
     
     def reset(self):
         self.car.reset_position()
+        self.reset_gates()
+
+        self.lap_start_time = time()
+
+    def reset_gates(self):
+        for i in range (0, len(self.gates)):
+            self.gates[i][1] = 0
+            self.window.update_gate(i, 0, self.gates[i])
 
     def check_for_collision_with_wall(self):
-        car_vertices = self.car.get_vertices(20, 10)
+        car_vertices = self.car.get_vertices(self.car_size[0], self.car_size[1])
         for i in range (0, 4):
             if self.track_array[int(car_vertices[i].y), int(car_vertices[i].x)] != 255:
                 self.reset()
                 return True
+            
+        return False
+
+    @staticmethod
+    def in_range(a, b, value):
+        if value >= min(a, b) and value <= max(a, b):
+            return True
+        
+        return False
+
+    @staticmethod        
+    def line_overlap(line_a, line_b):
+        line_a_slope = 0
+        line_b_slope = 0
+
+        line_a_intercept = 0
+        line_b_intercept = 0
+
+        if line_a[1][0] != line_a[0][0]:
+            line_a_slope = (line_a[1][1] - line_a[0][1])/(line_a[1][0] - line_a[0][0])
+            line_a_intercept = -line_a[0][0]*line_a_slope + line_a[0][1]
+        else:
+            # Means it is verticle
+            line_a_slope = "nan"
+
+        if line_b[1][0] != line_b[0][0]:
+            line_b_slope = (line_b[1][1] - line_b[0][1])/(line_b[1][0] - line_b[0][0])
+            line_b_intercept = -line_b[0][0]*line_b_slope + line_b[0][1]
+        else:
+            line_b_slope = "nan"
+
+        point_of_intercept = Vector(0, 0)
+
+        if line_a_slope == line_b_slope:
+            return False, point_of_intercept
+
+        if line_a_slope == "nan":
+            point_of_intercept.x = line_a[0][0]
+            point_of_intercept.y = line_b_slope*point_of_intercept.x + line_b_intercept
+        elif line_b_slope == "nan":
+            point_of_intercept.x = line_b[0][0]
+            point_of_intercept.y = line_a_slope*point_of_intercept.x + line_a_intercept
+        else:
+            point_of_intercept.x = (line_b_intercept - line_a_intercept)/(line_a_slope - line_b_slope)
+            point_of_intercept.y = line_a_slope*point_of_intercept.x + line_a_intercept
+
+        if (Environment.in_range(line_a[0][0], line_a[1][0], point_of_intercept.x) and Environment.in_range(line_a[0][1], line_a[1][1], point_of_intercept.y)) and (Environment.in_range(line_b[0][0], line_b[1][0], point_of_intercept.x) and Environment.in_range(line_b[0][1], line_b[1][1], point_of_intercept.y)):
+            return True, point_of_intercept
+        
+        return False, point_of_intercept

@@ -1,3 +1,12 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from collections import namedtuple, deque
+from itertools import count
+
+import math
+import random
 from time import time
 from keyboard import is_pressed
 
@@ -10,7 +19,7 @@ from Environment import Environment
 WINDOW_SIZE = (1000, 1000)
 
 CAR_SIZE = (10, 20)
-CAR_STARTING_POSITION = (400, 920)
+CAR_STARTING_POSITION = (570, 920)
 
 def convert_controls_to_action(acceleration, steering):
     action = 14
@@ -33,15 +42,15 @@ def convert_controls_to_action(acceleration, steering):
 
     return action
 
-
-def train(car):
-    environment = Environment(path_to_gates="race_track_gates", path_to_track="race_track.png", window_dimensions=WINDOW_SIZE, car=car)
+def train():
+    car = Car(max_speed=300, acceleration=50, brake_force=120, turning_speed=160, drag=40, starting_position=CAR_STARTING_POSITION, steering_to_speed_ratio=0.5)
+    environment = Environment(path_to_track="race_track_1", window_dimensions=WINDOW_SIZE, car=car, car_size=CAR_SIZE)
     
     delta_time = 0
     
     while True:
         start_time = time()
-        
+
         acceleration = 0
         steering = 0
         if is_pressed("w"):
@@ -49,20 +58,24 @@ def train(car):
         elif is_pressed("s"):
             acceleration = -1
 
+        if is_pressed("a"):
+            steering = -1
         if is_pressed("d"):
             steering = 1
-        elif is_pressed("a"):
-            steering = -1
 
         action = convert_controls_to_action(acceleration, steering)
 
-        environment.step(delta_time, action)
+        raycasts, reward, speed = environment.step(delta_time, action)
 
         delta_time = time() - start_time
 
 def main():
-    car = Car(max_speed=300, acceleration=50, brake_force=120, turning_speed=160, drag=40, starting_position=CAR_STARTING_POSITION, steering_to_speed_ratio=0.5)
-    train(car)
+    train()
 
 if __name__== "__main__":
     main()
+
+
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'next_state', 'reward'))
+

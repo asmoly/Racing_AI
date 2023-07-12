@@ -6,3 +6,6 @@ class Vector:
     def __add__(self, other):
         if type(other) == Vector:
             return Vector(self.x + other.x, self.y + other.y)
+        
+    def to_tuple(self):
+        return (self.x, self.y)

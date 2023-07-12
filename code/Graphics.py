@@ -13,6 +13,8 @@ class Graphics:
         self.root.track_image = track_image
         self.main_screen.create_image(0, 0, image=track_image, anchor=NW)
 
+        self.lap_time_text = self.main_screen.create_text(30, 30, text="Lap Time: No Lap Time", font=("ariel", 15), anchor=NW)
+
         self.car_sprite = 0
         self.gates = []
         self.raycasts = []
@@ -27,11 +29,14 @@ class Graphics:
                                                           car_vertices[3].x, car_vertices[3].y,
                                                           fill=color)
 
-    def draw_gates(self, gates):
-        self.gates = []
-        
+    def update_lap_time(self, time):
+        self.main_screen.itemconfig(self.lap_time_text, text=f"Lap Time: {str(time)}")
+
+    def draw_gates(self, gates, finish_line):
         for i in range (0, len(self.gates)):
             self.main_screen.delete(self.gates[i])
+
+        self.gates = []
         
         for gate in gates:
             color = "red"
@@ -39,6 +44,17 @@ class Graphics:
                 color = "green"
 
             self.gates.append(self.main_screen.create_line(gate[0][0][0], gate[0][0][1], gate[0][1][0], gate[0][1][1], fill=color, width=3))
+
+        self.gates.append(self.main_screen.create_line(finish_line[0][0], finish_line[0][1], finish_line[1][0], finish_line[1][1], fill="blue", width=5))
+
+    def update_gate(self, index, status, gate):
+        self.main_screen.delete(self.gates[index])
+        
+        color = "green"
+        if status == 0:
+            color = "red"
+
+        self.gates[index] = self.main_screen.create_line(gate[0][0][0], gate[0][0][1], gate[0][1][0], gate[0][1][1], fill=color, width=3)
 
     def draw_raycasts(self, raycasts):
         for i in range (0, len(self.raycasts)):
