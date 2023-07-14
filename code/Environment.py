@@ -31,6 +31,8 @@ class Environment:
         self.track_array = imread(path_to_track_image)
         self.track_array = cvtColor(self.track_array, COLOR_BGR2GRAY)
 
+        self.raycasts_to_draw = []
+
         self.gates = pickle.load(open(path_to_gates, "rb"))
         for i in range (0, len(self.gates)):
             self.gates[i] = [self.gates[i], 0]
@@ -43,6 +45,11 @@ class Environment:
         self.lap_start_time = time()
         self.on_finish_line = False
 
+        self.still_counter = 0
+
+        self.state = 0
+        self.step(1, len(Environment.actions_to_command) - 1)
+
     def step(self, delta_time, action):
         controls = Environment.actions_to_command[action]
         acceleration = controls[0]
@@ -51,16 +58,27 @@ class Environment:
         self.car.update_position(acceleration, steering, delta_time)
         
         reward = 0
+        done = False
 
-        raycasts, raycasts_to_draw = self.get_raycast_values([90, -90, 0, 10, 20, 30, 50, 70, -10, -20, -30, -50, -70])
+        raycasts, self.raycasts_to_draw = self.get_raycast_values([90, -90, 0, 10, 20, 30, 50, 70, -10, -20, -30, -50, -70])
 
         # 1 is right direction, 0 is wrong direction
         direction = 0
         if raycasts[0][1] == 1 and raycasts[1][1] == 0:
             direction = 1
-            reward += 1
+            if self.car.speed > 1:
+                reward += 1*(self.car.speed/self.car.max_speed)
         else:
             reward -= 1
+
+        if self.car.speed <= 1:
+            reward -= 1
+            self.still_counter += 1
+
+        if self.still_counter >= 100:
+            reward -= 20
+            done = True
+            self.still_counter = 0
 
         gate_collision = self.check_for_collision_with_gates()
 
@@ -68,20 +86,29 @@ class Environment:
             reward += 5
         elif gate_collision == "finish":
             reward += 20
+            done = True
         elif gate_collision == "finish new best":
-            reward += 40
+            reward += 50
+            done = True
 
         wall_collision = self.check_for_collision_with_wall()
 
         if wall_collision == True:
-            reward -= 15
+            reward -= 25
+            done = True
 
-        self.window.draw_raycasts(raycasts_to_draw)
-        self.window.draw_car(self.car, "red", self.car_size)
-        #self.window.draw_gates(self.gates)
-        self.window.update_window()
+        raycasts_as_array = np.array(raycasts)
+        # Normalizing raycast length, 1000 is max length
+        raycasts_as_array[:, 0] = raycasts_as_array[:, 0]/1000
+        raycasts_as_array = raycasts_as_array.reshape((len(raycasts)*2))
 
-        return raycasts, reward, self.car.speed
+        state = np.zeros((raycasts_as_array.shape[0] + 1))
+        state[0:raycasts_as_array.shape[0]] = raycasts_as_array
+        state[raycasts_as_array.shape[0]] = self.car.speed
+
+        self.state = state
+
+        return state, reward, done
 
     def check_for_collision_with_gates(self):
         car_vertices = self.car.get_vertices(self.car_size[0], self.car_size[1])
@@ -109,7 +136,7 @@ class Environment:
                         new_best = True
 
                     self.lap_start_time = time()
-                    self.reset_gates()
+                    #self.reset_gates()
                     self.on_finish_line = True
                       
                     if new_best == True:
@@ -131,6 +158,13 @@ class Environment:
                             return True
 
         return False
+
+    def render(self, draw_raycasts=True):
+        if draw_raycasts == True:
+            self.window.draw_raycasts(self.raycasts_to_draw)
+
+        self.window.draw_car(self.car, "red", self.car_size)
+        self.window.update_window()
 
     def get_raycast_values(self, raycast_angles):
         raycast_results = []
@@ -168,6 +202,10 @@ class Environment:
         self.reset_gates()
 
         self.lap_start_time = time()
+
+        self.step(1, len(Environment.actions_to_command) - 1)
+
+        return self.state
 
     def reset_gates(self):
         for i in range (0, len(self.gates)):
