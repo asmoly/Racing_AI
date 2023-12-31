@@ -50,7 +50,7 @@ def load_model(path):
     return model
 
 #policy = Policy()
-policy = load_model("race_net.pt")    
+policy = load_model("models/race_net_official.pt")    
 
 optimizer = optim.AdamW(policy.parameters(), lr=1e-5)
 eps = np.finfo(np.float32).eps.item()
@@ -173,7 +173,7 @@ def train():
         print(f"\rRunning Reward: {running_reward}, Episode Reward: {episode_reward}, Episode #: {i_episode}")
 
         if i_episode % 10 == 0:
-            torch.save(policy.state_dict(), "race_net.pt")
+            torch.save(policy.state_dict(), "models/race_net.pt")
 
 def main():
     train()
