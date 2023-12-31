@@ -16,11 +16,11 @@ from Environment import Environment
 WINDOW_SIZE = (1000, 1000)
 
 CAR_SIZE = (10, 20)
-CAR_STARTING_POSITION = (570, 920)
+CAR_STARTING_POSITION = (520, 920)
 
 RENDER = True
 
-GAMMA = 0.1
+GAMMA = 0.5
 
 car = Car(max_speed=300, acceleration=50, brake_force=120, turning_speed=160, drag=40, starting_position=CAR_STARTING_POSITION, steering_to_speed_ratio=0.5)
 environment = Environment(path_to_track="race_track_1", window_dimensions=WINDOW_SIZE, car=car, car_size=CAR_SIZE)
@@ -38,9 +38,8 @@ class Policy(nn.Module):
     def forward(self, x):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
-        #x = F.relu(x)
-
         action_scores = self.layer3(x)
+        
         return F.softmax(action_scores, dim=1)
 
 def load_model(path):
@@ -51,8 +50,9 @@ def load_model(path):
     return model
 
 #policy = Policy()
-policy = load_model("race_net.pt")
-optimizer = optim.Adam(policy.parameters(), lr=1e-5)
+policy = load_model("race_net.pt")    
+
+optimizer = optim.AdamW(policy.parameters(), lr=1e-5)
 eps = np.finfo(np.float32).eps.item()
 
 def select_action(state):
@@ -60,15 +60,16 @@ def select_action(state):
     probs = policy(state)
 
     try:
-        m = Categorical(probs)
+        m = Categorical(probs=probs)
         action = m.sample()
         policy.saved_log_probs.append(m.log_prob(action))
 
         return action.item()
     except:
-        print(probs)
-        raise Exception('categorical is broken')
-        #return 0
+        print("Probs:", probs)
+        print("State:", state)
+        raise Exception("Categorical is broken!!!!!!!!!!!!!!!")
+        return 0
 
 def finish_episode():
     R = 0
@@ -86,11 +87,18 @@ def finish_episode():
     for log_prob, R in zip(policy.saved_log_probs, returns):
         policy_loss.append(-log_prob * R)
 
+    #print(policy_loss)
+
     optimizer.zero_grad()
-    policy_loss = torch.cat(policy_loss).sum()
+    policy_loss = torch.cat(policy_loss).sum()  # can be avg() to make it sampled expectation
+    #print(f"        Loss: {policy_loss.item()}")
+
     policy_loss.backward()
     optimizer.step()
 
+    reset_reward_and_probs()
+
+def reset_reward_and_probs():
     del policy.rewards[:]
     del policy.saved_log_probs[:]
 
@@ -116,38 +124,55 @@ def convert_controls_to_action(acceleration, steering):
     return action
 
 def train():
-    running_reward = 10
+    running_reward = 0
+
     for i_episode in count(1):
         delta_time = 0
         
         state = environment.reset()
         episode_reward = 0
 
-        for i in range (0, 2000):
-            start_time = time()
+        done = False
+        sub_episode_counter = 0
 
-            action = select_action(state) 
-            state, reward, done = environment.step(delta_time, action)
+        while done == False:
+            sub_episode_length = 0
+            for i in range (0, 2000):
+                start_time = time()
 
-            if RENDER == True:
-                environment.render(draw_raycasts=False)
+                action = select_action(state) 
+                state, reward, done = environment.step(delta_time, action)
 
-            policy.rewards.append(reward)
-            episode_reward += reward
+                if RENDER == True:
+                    environment.render(draw_raycasts=False)
 
-            if done == True:
-                break
+                policy.rewards.append(reward)
+                episode_reward += reward
 
-            print(f"\r{i} | Action: {action}", end="")
+                print(f"\rSubepisode: {sub_episode_counter}, Loop idx: {i} | Action: {action}", end="")
 
-            delta_time = time() - start_time
+                sub_episode_length = i
 
-        running_reward = 0.05 * episode_reward + (1 - 0.05) * running_reward
-        finish_episode()
+                if done == True:
+                    break
+
+                delta_time = time() - start_time
+
+            running_reward = 0.05 * episode_reward + (1 - 0.05) * running_reward
+            
+            if sub_episode_length > 10:
+                finish_episode()
+            else:
+                reset_reward_and_probs()
+
+            sub_episode_counter += 1
+
+            if sub_episode_counter >= 20:
+                done = True
 
         print(f"\rRunning Reward: {running_reward}, Episode Reward: {episode_reward}, Episode #: {i_episode}")
 
-        if i_episode % 20 == 0:
+        if i_episode % 10 == 0:
             torch.save(policy.state_dict(), "race_net.pt")
 
 def main():

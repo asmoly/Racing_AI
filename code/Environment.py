@@ -62,20 +62,25 @@ class Environment:
 
         raycasts, self.raycasts_to_draw = self.get_raycast_values([90, -90, 0, 10, 20, 30, 50, 70, -10, -20, -30, -50, -70])
 
+        if raycasts[2][0] < 100 and acceleration < 0 and self.car.speed > 100:
+            reward += 1
+
         # 1 is right direction, 0 is wrong direction
         direction = 0
         if raycasts[0][1] == 1 and raycasts[1][1] == 0:
             direction = 1
             if self.car.speed > 1:
-                reward += 1*(self.car.speed/self.car.max_speed)
+                #reward += 1*(self.car.speed/self.car.max_speed)
+                reward += 1
+                self.still_counter = 0
         else:
             reward -= 1
 
         if self.car.speed <= 1:
-            reward -= 1
+            reward -= 2
             self.still_counter += 1
 
-        if self.still_counter >= 100:
+        if self.still_counter >= 50:
             reward -= 20
             done = True
             self.still_counter = 0
@@ -104,7 +109,11 @@ class Environment:
 
         state = np.zeros((raycasts_as_array.shape[0] + 1))
         state[0:raycasts_as_array.shape[0]] = raycasts_as_array
-        state[raycasts_as_array.shape[0]] = self.car.speed
+        state[raycasts_as_array.shape[0]] = self.car.speed/self.car.max_speed
+
+        if np.isnan(state).any() == True:
+            print("State:", state)
+            raise Exception("State contains Nan!!!!!!!!")
 
         self.state = state
 
@@ -198,9 +207,10 @@ class Environment:
         return raycast_results, raycasts_to_draw
     
     def reset(self):
-        self.car.reset_position()
+        self.car.reset_position(random_pos=True, gates=self.gates)
         self.reset_gates()
 
+        self.still_counter = 0
         self.lap_start_time = time()
 
         self.step(1, len(Environment.actions_to_command) - 1)
@@ -216,7 +226,7 @@ class Environment:
         car_vertices = self.car.get_vertices(self.car_size[0], self.car_size[1])
         for i in range (0, 4):
             if self.track_array[int(car_vertices[i].y), int(car_vertices[i].x)] != 255:
-                self.reset()
+                #self.reset()
                 return True
             
         return False

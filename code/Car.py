@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import random
 
 from Matrix import Matrix
 from Vector import Vector
@@ -54,8 +55,19 @@ class Car:
 
         return vertices
     
-    def reset_position(self):
-        self.position.x = self.starting_position[0]
-        self.position.y = self.starting_position[1]
+    def reset_position(self, random_pos=False, gates=None):
+        if random_pos == False:
+            self.position.x = self.starting_position[0]
+            self.position.y = self.starting_position[1]
+            self.rotation = 0
+        else:
+            random_index = random.randrange(0, len(gates))
+            
+            pos1 = gates[random_index][0][0]
+            pos2 = gates[random_index][0][1]
+
+            self.position.x = (pos1[0] + pos2[0])/2
+            self.position.y = (pos1[1] + pos2[1])/2
+            self.rotation = (math.atan2((pos1[0] - pos2[0]), (pos2[1] - pos1[1])))*(180/math.pi)
+        
         self.speed = 0
-        self.rotation = 0
